@@ -108,7 +108,8 @@ function listingPeoplePage() {
     <div class="wrap">        
         <table class="wp-list-table widefat fixed striped">
             <thead>
-                <tr>                    
+                <tr>         
+                    <th>Avatar</th>           
                     <th>Name</th>
                     <th>Email</th>
                     <th>Contacts</th>
@@ -117,7 +118,13 @@ function listingPeoplePage() {
             </thead>
             <tbody>
                 <?php foreach ($arrayPeopleContacts as $personId => $person){ ?>
-                    <tr>                        
+                    <tr>
+                        <td>
+                        <img width="100"
+                            src="https://api.dicebear.com/8.x/adventurer/svg?seed=<?php echo explode("@",$person["email"])[0]; ?>&flip=true"
+                            alt="avatar"
+                            />
+                        </td>
                         <td><?php echo $person["name"]; ?></td>
                         <td><?php echo $person["email"]; ?></td>
                         <td>
