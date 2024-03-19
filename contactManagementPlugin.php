@@ -313,8 +313,28 @@ function addContactPage() {
                             <span class="description">(required)</span>
                         </label>
                     </th>
-                    <td>
-                        <input name="countryCode" type="text" id="countryCode" value="" >
+                    <td>                        
+                        <select name="countryCode" required>
+                            <option selected disabled></option>
+                            <?php
+
+                            $url = "https://restcountries.com/v3.1/independent?status=true&fields=name,idd";
+
+                            $curl = curl_init($url);
+                            curl_setopt($curl, CURLOPT_URL, $url);
+                            curl_setopt($curl, CURLOPT_RETURNTRANSFER, true);
+                            
+                            curl_setopt($curl, CURLOPT_SSL_VERIFYPEER, false);
+
+                            $resp = curl_exec($curl);
+                            curl_close($curl);
+                            $countries = json_decode($resp);
+
+                            foreach($countries as $country){
+                                echo "<option value='".intval($country->idd->root.$country->idd->suffixes[0])."'>".$country->name->common." (".$country->idd->root.$country->idd->suffixes[0].")</option>";
+                            }                            
+                            ?>
+                        </select>
                     </td>
                 </tr>
                 <tr class="form-field form-required">
