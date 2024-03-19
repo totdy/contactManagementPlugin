@@ -93,7 +93,7 @@ function listingPeoplePage() {
         FROM 
             $peopleTable p        
         LEFT JOIN 
-            $contactsTable c ON p.id = c.personId
+            (SELECT * FROM $contactsTable WHERE active = 1) c ON p.id = c.personId
         WHERE p.active = 1
     ");
     foreach ($peopleContacts as $person){
@@ -124,8 +124,14 @@ function listingPeoplePage() {
                             <ul>
                             <?php
                             if(isset($person["contact"])){
-                                foreach ($person["contact"] as $contact){
-                                    echo "<li>+".$contact["countryCode"].$contact["number"]."</li>";
+                                foreach ($person["contact"] as $contactId => $contact){
+                                    ?>
+                                    <li>
+                                        <?php echo "+".$contact["countryCode"].$contact["number"]; ?>
+                                        <a href="<?php echo admin_url("admin.php?page=addContact&editContactId=".$contactId); ?>">Edit</a>
+                                        <a href="<?php echo admin_url("admin.php?page=addContact&deleteContactId=".$contactId); ?>">Delete</a>
+                                    </li>
+                                    <?php
                                 }
                             }                            
                             ?>
@@ -134,10 +140,10 @@ function listingPeoplePage() {
                         </td>
                         <td>
                             <div>
-                            <a href="<?php echo admin_url("admin.php?page=addPerson&editPersonId=".$personId); ?>">Edit</a>
+                            <a href="<?php echo admin_url("admin.php?page=addPerson&editPersonId=".$personId); ?>">Edit Person</a>
                             </div>
                             <div class="trash">
-                                <a href="<?php echo admin_url("admin.php?page=addPerson&deletePersonId=".$personId); ?>">Delete</a>
+                                <a href="<?php echo admin_url("admin.php?page=addPerson&deletePersonId=".$personId); ?>">Delete Person</a>
                             </div>
                         </td>
                     </tr>
@@ -155,9 +161,9 @@ function addPersonPage() {
         $personId = intval($_GET['editPersonId']);
 
         global $wpdb;
-        $people_table = $wpdb->prefix . 'cmp_people';
+        $peopleTable = $wpdb->prefix . 'cmp_people';
         $result = $wpdb->update(
-            $people_table,
+            $peopleTable,
             array(
                 'name' => $name,
                 'email' => $email
@@ -178,9 +184,9 @@ function addPersonPage() {
         $email = sanitize_email($_POST['email']);
 
         global $wpdb;
-        $people_table = $wpdb->prefix . 'cmp_people';
+        $peopleTable = $wpdb->prefix . 'cmp_people';
         $result = $wpdb->insert(
-            $people_table,
+            $peopleTable,
             array(
                 'name' => $name,
                 'email' => $email,
@@ -198,14 +204,24 @@ function addPersonPage() {
         $personId = intval($_GET['deletePersonId']);
 
         global $wpdb;
-        $people_table = $wpdb->prefix . 'cmp_people';
+        $peopleTable = $wpdb->prefix . 'cmp_people';
+        $contactTable = $wpdb->prefix . 'cmp_contacts';
         $result = $wpdb->update(
-            $people_table,
+            $peopleTable,
             array(                
                 'active' => 0
             ),
             array(
                 'id' => $personId
+            )
+        );
+        $result = $wpdb->update(
+            $contactTable,
+            array(                
+                'active' => 0
+            ),
+            array(
+                'personId' => $personId
             )
         );
          if ($result) {            
@@ -220,11 +236,11 @@ function addPersonPage() {
         $personId = intval($_GET['editPersonId']);
 
         global $wpdb;
-        $people_table = $wpdb->prefix . 'cmp_people';
+        $peopleTable = $wpdb->prefix . 'cmp_people';
         $person = $wpdb->get_results("
             SELECT 
             * 
-            FROM $people_table
+            FROM $peopleTable
             WHERE id = $personId
         ")[0];         
     }    
@@ -266,24 +282,47 @@ function addPersonPage() {
                     <input type="submit" name="addPerson" class="button button-primary" value="Add New Person">
                     <?php
                 }
-                ?>                
+                ?>
             </p>
         </form>
     </div>
     <?php
 }
 function addContactPage() {
-    
-    $personId = isset($_GET['personId']) ? intval($_GET['personId']) : false;
-    if (!$personId) {       
+        
+    if (!isset($_GET['personId']) && !isset($_GET['deleteContactId']) && !isset($_GET['editContactId'])) {       
         echo '<div class="error"><p>No direct access to page. Only from listing people menu.</p></div>';
         exit();
     }
-    
+    if (isset($_POST['updateContact'])) {
+        
+        $countryCode = sanitize_text_field($_POST['countryCode']);
+        $number = sanitize_text_field($_POST['number']);
+        $contactId = intval($_GET['editContactId']);
+
+        global $wpdb;
+        $contactTable = $wpdb->prefix . 'cmp_contacts';
+        $result = $wpdb->update(
+            $contactTable,
+            array(
+                'countryCode' => $countryCode,
+                'number' => $number
+            ),
+            array(
+                'id' => $contactId
+            )
+        );
+         if ($result) {            
+            echo '<div class="updated"><p>New person added successfully!</p></div>';
+        } else {            
+            echo '<div class="error"><p>Failed to add new person. Please try again later.</p></div>';
+        }
+    }
     if (isset($_POST['addContact'])) {
         
         $countryCode = sanitize_text_field($_POST['countryCode']);
-        $number = sanitize_text_field($_POST['number']);        
+        $number = sanitize_text_field($_POST['number']); 
+        $personId = intval($_GET['personId']);       
 
         global $wpdb;
         $contactsTable = $wpdb->prefix . 'cmp_contacts';
@@ -302,6 +341,41 @@ function addContactPage() {
             echo '<div class="error"><p>Failed to add new contact. Please try again later.</p></div>';
         }
     }
+    if (isset($_GET['deleteContactId'])) {
+        
+        $contactId = intval($_GET['deleteContactId']);
+
+        global $wpdb;
+        $contactsTable = $wpdb->prefix . 'cmp_contacts';
+        $result = $wpdb->update(
+            $contactsTable,
+            array(                
+                'active' => 0
+            ),
+            array(
+                'id' => $contactId
+            )
+        );
+         if ($result) {            
+            echo '<div class="updated"><p>Contact deleted successfully!</p></div>';
+        } else {            
+            echo '<div class="error"><p>Failed to delete a contact. Please try again later.</p></div>';
+        }
+        exit();
+    }
+    if (isset($_GET['editContactId'])) {
+        
+        $contactId = intval($_GET['editContactId']);
+
+        global $wpdb;
+        $contactsTable = $wpdb->prefix . 'cmp_contacts';
+        $contact = $wpdb->get_results("
+            SELECT 
+            * 
+            FROM $contactsTable
+            WHERE id = $contactId
+        ")[0];         
+    }  
     ?>
     <div class="wrap">
         <form method="post" class="validate">
@@ -331,7 +405,11 @@ function addContactPage() {
                             $countries = json_decode($resp);
 
                             foreach($countries as $country){
-                                echo "<option value='".intval($country->idd->root.$country->idd->suffixes[0])."'>".$country->name->common." (".$country->idd->root.$country->idd->suffixes[0].")</option>";
+                                echo "<option value='".intval($country->idd->root.$country->idd->suffixes[0])."' ";
+                                if(isset($contact->countryCode) && $contact->countryCode == intval($country->idd->root.$country->idd->suffixes[0])){
+                                    echo "selected";
+                                }                                 
+                                echo" >".$country->name->common." (".$country->idd->root.$country->idd->suffixes[0].")</option>";
                             }                            
                             ?>
                         </select>
@@ -344,13 +422,23 @@ function addContactPage() {
                         </label>
                     </th>
                     <td>
-                        <input name="number" type="number" id="number" value="" step="1" minlength="9" maxlength="9">
+                        <input name="number" type="number" id="number" step="1" minlength="9" maxlength="9" value="<?php echo isset($contact->number) ? $contact->number : "";?>">
                     </td>
                 </tr>
                 </tbody>
             </table>
             <p class="submit">
-                <input type="submit" name="addContact" class="button button-primary" value="Add New Contact">
+                <?php
+                if(isset($contact->id)){
+                    ?>                    
+                    <input type="submit" name="updateContact" class="button button-primary" value="Update Contact">
+                    <?php
+                }else{
+                    ?>
+                    <input type="submit" name="addContact" class="button button-primary" value="Add New Contact">
+                    <?php
+                }
+                ?>                
             </p>
         </form>
     </div>
