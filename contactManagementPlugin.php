@@ -10,8 +10,7 @@ function contactManagementPluginActivate() {
     global $wpdb;
 
     $peopleTable = $wpdb->prefix . 'cmp_people';
-    $contactsTable = $wpdb->prefix . 'cmp_contacts';
-    $peopleContactsTable = $wpdb->prefix . 'cmp_people_contacts';
+    $contactsTable = $wpdb->prefix . 'cmp_contacts';    
 
     $charsetCollate = $wpdb->get_charset_collate();
     require_once(ABSPATH . 'wp-admin/includes/upgrade.php');
@@ -31,22 +30,15 @@ function contactManagementPluginActivate() {
     if ($wpdb->get_var("SHOW TABLES LIKE '$contactsTable'") != $contactsTable) {
         $sql = "CREATE TABLE $contactsTable (
             id int(11) NOT NULL AUTO_INCREMENT,
+            personId int(11) NOT NULL,
             countryCode varchar(10) NOT NULL,
             number int(9) NOT NULL,
+            active int(1) NOT NULL,
             UNIQUE ccn (countryCode, number),
             PRIMARY KEY  (id)
         ) $charsetCollate;";        
         dbDelta($sql);
-    }
-    if ($wpdb->get_var("SHOW TABLES LIKE '$peopleContactsTable'") != $peopleContactsTable) {
-        $sql = "CREATE TABLE $peopleContactsTable (
-            idPerson int(11) NOT NULL,
-            idContact int(11) NOT NULL,
-            active int(1) NOT NULL,
-            PRIMARY KEY  (idPerson, idContact)
-        ) $charsetCollate;";        
-        dbDelta($sql);
-    }
+    }    
 }
 register_activation_hook(__FILE__, 'contactManagementPluginActivate');
 
@@ -87,7 +79,71 @@ function contactManagementMenu() {
 add_action('admin_menu', 'contactManagementMenu');
 
 function listingPeoplePage() {
+    global $wpdb;
+    $peopleTable = $wpdb->prefix . 'cmp_people';    
+    $contactsTable = $wpdb->prefix . 'cmp_contacts';
 
+    $peopleContacts = $wpdb->get_results("
+        SELECT 
+            p.id as personId,
+            p.name,
+            p.email, 
+            c.id as contactId,
+            c.countryCode,
+            c.number
+        FROM 
+            $peopleTable p        
+        LEFT JOIN 
+            $contactsTable c ON p.id = c.personId
+    ");
+    foreach ($peopleContacts as $person){
+        $arrayPeopleContacts[$person->personId]["name"] = $person->name;
+        $arrayPeopleContacts[$person->personId]["email"] = $person->email;
+        if($person->contactId != NULL ){
+            $arrayPeopleContacts[$person->personId]["contact"][$person->contactId]["countryCode"] = $person->countryCode;
+            $arrayPeopleContacts[$person->personId]["contact"][$person->contactId]["number"] = $person->number;
+        }
+    }
+    ?>
+    <div class="wrap">        
+        <table class="wp-list-table widefat fixed striped">
+            <thead>
+                <tr>                    
+                    <th>Name</th>
+                    <th>Email</th>
+                    <th>Contacts</th>
+                    <th>Actions</th>
+                </tr>
+            </thead>
+            <tbody>
+                <?php foreach ($arrayPeopleContacts as $personId => $person){ ?>
+                    <tr>                        
+                        <td><?php echo $person["name"]; ?></td>
+                        <td><?php echo $person["email"]; ?></td>
+                        <td>
+                            <ul>
+                            <?php
+                            foreach ($person["contact"] as $contact){
+                                echo "<li>+".$contact["countryCode"].$contact["number"]."</li>";
+                            }
+                            ?>
+                            <ul>
+                            <a href="<?php echo admin_url("admin.php?page=addContact&personId=".$personId); ?>">Add Contact</a>
+                        </td>
+                        <td>
+                            <div>
+                                <a href="<?php echo $personId; ?>">Edit</a>
+                            </div>
+                            <div class="trash">
+                                <a href="<?php echo $personId; ?>">Delete</a>
+                            </div>
+                        </td>
+                    </tr>
+                <?php } ?>
+            </tbody>
+        </table>
+    </div>
+    <?php
 }
 function addPersonPage() {
     if (isset($_POST['addPerson'])) {
@@ -97,7 +153,7 @@ function addPersonPage() {
 
         global $wpdb;
         $people_table = $wpdb->prefix . 'cmp_people';
-        $wpdb->insert(
+        $result = $wpdb->insert(
             $people_table,
             array(
                 'name' => $name,
@@ -105,7 +161,11 @@ function addPersonPage() {
                 'active' => 1
             )
         );
-        echo '<div class="updated"><p>New person added successfully!</p></div>';
+         if ($result) {            
+            echo '<div class="updated"><p>New person added successfully!</p></div>';
+        } else {            
+            echo '<div class="error"><p>Failed to add new person. Please try again later.</p></div>';
+        }
     }
     ?>
     <div class="wrap">
@@ -119,7 +179,7 @@ function addPersonPage() {
                         </label>
                     </th>
                     <td>
-                        <input name="name" type="text" id="name" value="" maxlength="5" maxlength="100">
+                        <input name="name" type="text" id="name" value="" minlength="5" maxlength="100">
                     </td>
                 </tr>
                 <tr class="form-field form-required">
@@ -142,5 +202,60 @@ function addPersonPage() {
     <?php
 }
 function addContactPage() {
+    if (isset($_POST['addContact'])) {
+        
+        $countryCode = sanitize_text_field($_POST['countryCode']);
+        $number = sanitize_text_field($_POST['number']);
+        $personId = sanitize_text_field($_GET['personId']);
 
+        global $wpdb;
+        $contactsTable = $wpdb->prefix . 'cmp_contacts';
+        $result = $wpdb->insert(
+            $contactsTable,
+            array(
+                'personId' => $personId,
+                'countryCode' => $countryCode,
+                'number' => $number,
+                'active' => 1
+            )
+        );
+         if ($result) {            
+            echo '<div class="updated"><p>New contact added successfully!</p></div>';
+        } else {            
+            echo '<div class="error"><p>Failed to add new contact. Please try again later.</p></div>';
+        }
+    }
+    ?>
+    <div class="wrap">
+        <form method="post" class="validate">
+            <table class="form-table">
+                <tbody>
+                <tr class="form-field form-required">
+                    <th scope="row">
+                        <label for="countryCode">Country 
+                            <span class="description">(required)</span>
+                        </label>
+                    </th>
+                    <td>
+                        <input name="countryCode" type="text" id="countryCode" value="" >
+                    </td>
+                </tr>
+                <tr class="form-field form-required">
+                    <th scope="row">
+                        <label for="number">Number 
+                            <span class="description">(required)</span>
+                        </label>
+                    </th>
+                    <td>
+                        <input name="number" type="number" id="number" value="" step="1" minlength="9" maxlength="9">
+                    </td>
+                </tr>
+                </tbody>
+            </table>
+            <p class="submit">
+                <input type="submit" name="addContact" class="button button-primary" value="Add New Contact">
+            </p>
+        </form>
+    </div>
+    <?php
 }
