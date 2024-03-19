@@ -5,7 +5,6 @@ Description: A plugin to manage contacts.
 Version: 1.0
 Author: Nazar Poritskiy
 */
-
 function contactManagementPluginActivate() {
     global $wpdb;
 
@@ -95,6 +94,7 @@ function listingPeoplePage() {
             $peopleTable p        
         LEFT JOIN 
             $contactsTable c ON p.id = c.personId
+        WHERE p.active = 1
     ");
     foreach ($peopleContacts as $person){
         $arrayPeopleContacts[$person->personId]["name"] = $person->name;
@@ -123,19 +123,21 @@ function listingPeoplePage() {
                         <td>
                             <ul>
                             <?php
-                            foreach ($person["contact"] as $contact){
-                                echo "<li>+".$contact["countryCode"].$contact["number"]."</li>";
-                            }
+                            if(isset($person["contact"])){
+                                foreach ($person["contact"] as $contact){
+                                    echo "<li>+".$contact["countryCode"].$contact["number"]."</li>";
+                                }
+                            }                            
                             ?>
                             <ul>
                             <a href="<?php echo admin_url("admin.php?page=addContact&personId=".$personId); ?>">Add Contact</a>
                         </td>
                         <td>
                             <div>
-                                <a href="<?php echo $personId; ?>">Edit</a>
+                            <a href="<?php echo admin_url("admin.php?page=addPerson&editPersonId=".$personId); ?>">Edit</a>
                             </div>
                             <div class="trash">
-                                <a href="<?php echo $personId; ?>">Delete</a>
+                                <a href="<?php echo admin_url("admin.php?page=addPerson&deletePersonId=".$personId); ?>">Delete</a>
                             </div>
                         </td>
                     </tr>
@@ -146,6 +148,30 @@ function listingPeoplePage() {
     <?php
 }
 function addPersonPage() {
+    if (isset($_POST['updatePerson'])) {
+        
+        $name = sanitize_text_field($_POST['name']);
+        $email = sanitize_email($_POST['email']);
+        $personId = intval($_GET['editPersonId']);
+
+        global $wpdb;
+        $people_table = $wpdb->prefix . 'cmp_people';
+        $result = $wpdb->update(
+            $people_table,
+            array(
+                'name' => $name,
+                'email' => $email
+            ),
+            array(
+                'id' => $personId
+            )
+        );
+         if ($result) {            
+            echo '<div class="updated"><p>New person added successfully!</p></div>';
+        } else {            
+            echo '<div class="error"><p>Failed to add new person. Please try again later.</p></div>';
+        }
+    }
     if (isset($_POST['addPerson'])) {
         
         $name = sanitize_text_field($_POST['name']);
@@ -167,6 +193,41 @@ function addPersonPage() {
             echo '<div class="error"><p>Failed to add new person. Please try again later.</p></div>';
         }
     }
+    if (isset($_GET['deletePersonId'])) {
+        
+        $personId = intval($_GET['deletePersonId']);
+
+        global $wpdb;
+        $people_table = $wpdb->prefix . 'cmp_people';
+        $result = $wpdb->update(
+            $people_table,
+            array(                
+                'active' => 0
+            ),
+            array(
+                'id' => $personId
+            )
+        );
+         if ($result) {            
+            echo '<div class="updated"><p>Person deleted successfully!</p></div>';
+        } else {            
+            echo '<div class="error"><p>Failed to delete a person. Please try again later.</p></div>';
+        }
+        exit();
+    }
+    if (isset($_GET['editPersonId'])) {
+        
+        $personId = intval($_GET['editPersonId']);
+
+        global $wpdb;
+        $people_table = $wpdb->prefix . 'cmp_people';
+        $person = $wpdb->get_results("
+            SELECT 
+            * 
+            FROM $people_table
+            WHERE id = $personId
+        ")[0];         
+    }    
     ?>
     <div class="wrap">
         <form method="post" class="validate">
@@ -179,7 +240,7 @@ function addPersonPage() {
                         </label>
                     </th>
                     <td>
-                        <input name="name" type="text" id="name" value="" minlength="5" maxlength="100">
+                        <input name="name" type="text" id="name" minlength="5" maxlength="100" value="<?php echo isset($person->name) ? $person->name : "";?>">
                     </td>
                 </tr>
                 <tr class="form-field form-required">
@@ -189,24 +250,40 @@ function addPersonPage() {
                         </label>
                     </th>
                     <td>
-                        <input name="email" type="email" id="email" value="" maxlength="255">
+                        <input name="email" type="email" id="email" maxlength="255" value="<?php echo isset($person->email) ? $person->email : "";?>">
                     </td>
                 </tr>
                 </tbody>
             </table>
             <p class="submit">
-                <input type="submit" name="addPerson" class="button button-primary" value="Add New Person">
+                <?php
+                if(isset($person->id)){
+                    ?>                    
+                    <input type="submit" name="updatePerson" class="button button-primary" value="Update Person">
+                    <?php
+                }else{
+                    ?>
+                    <input type="submit" name="addPerson" class="button button-primary" value="Add New Person">
+                    <?php
+                }
+                ?>                
             </p>
         </form>
     </div>
     <?php
 }
 function addContactPage() {
+    
+    $personId = isset($_GET['personId']) ? intval($_GET['personId']) : false;
+    if (!$personId) {       
+        echo '<div class="error"><p>No direct access to page. Only from listing people menu.</p></div>';
+        exit();
+    }
+    
     if (isset($_POST['addContact'])) {
         
         $countryCode = sanitize_text_field($_POST['countryCode']);
-        $number = sanitize_text_field($_POST['number']);
-        $personId = sanitize_text_field($_GET['personId']);
+        $number = sanitize_text_field($_POST['number']);        
 
         global $wpdb;
         $contactsTable = $wpdb->prefix . 'cmp_contacts';
